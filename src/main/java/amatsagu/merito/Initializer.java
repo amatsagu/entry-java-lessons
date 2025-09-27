@@ -72,7 +72,7 @@ public class Initializer {
             Integer playerValue;
 
             try {
-                playerValue = Integer.valueOf(scan.nextLine(), 10);
+                playerValue = Integer.valueOf(scan.nextLine().trim(), 10);
             } catch (Exception e) {
                 System.out.println("Provided value is not a correct integer, try again.");
                 continue;
