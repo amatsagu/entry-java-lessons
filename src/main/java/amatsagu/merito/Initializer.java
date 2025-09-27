@@ -27,7 +27,7 @@ public class Initializer {
             }
 
             var score = handleSession(scan, player);
-            if (score > currentBest) {
+            if (score < currentBest) {
                 System.out.println("Congratulations! You've established new personal best guess score of " + score + " guess(es)!");
                 writeGameResult(player, score);
             }
