@@ -26,13 +26,110 @@ public class Initializer {
                 System.out.println("Welcome! There's no previous record of your game(s) - starting as new challenger!");
             }
 
-            var score = handleSession(scan, player);
-            if (score < currentBest) {
-                System.out.println("Congratulations! You've established new personal best guess score of " + score + " guess(es)!");
-                writeGameResult(player, score);
+            int difficulty = chooseDifficulty(scan);
+            int gameMode = chooseGameMode(scan);
+
+            if (gameMode == 1) {
+                var score = handleSession(scan, player, difficulty);
+                if (score < currentBest || currentBest == 0) {
+                    System.out.println("Congratulations! You've established new personal best guess score of " + score + " guess(es)!");
+                    writeGameResult(player, score);
+                }
+            } else {
+                handleMultiplayerSession(scan, player, difficulty);
             }
         } catch (Exception e) {
             System.err.println("caught exception error in main game loop: " + e);
+        }
+    }
+
+    private int chooseGameMode(Scanner scan) {
+        while (true) {
+            System.out.println("Choose game mode:");
+            System.out.println("1. Single Player");
+            System.out.println("2. Multiplayer (vs. Computer)");
+            System.out.print("Enter your choice: ");
+            String input = scan.nextLine().trim();
+            if (input.equals("1") || input.equals("2")) {
+                return Integer.parseInt(input);
+            } else {
+                System.out.println("Invalid choice. Please enter 1 or 2.");
+            }
+        }
+    }
+
+    private int chooseDifficulty(Scanner scan) {
+        while (true) {
+            System.out.println("Choose difficulty level:");
+            System.out.println("1. Easy (0-100)");
+            System.out.println("2. Normal (0-10000)");
+            System.out.println("3. Hard (0-1000000)");
+            System.out.print("Enter your choice: ");
+            String input = scan.nextLine().trim();
+            switch (input) {
+                case "1":
+                    return 100;
+                case "2":
+                    return 10000;
+                case "3":
+                    return 1000000;
+                default:
+                    System.out.println("Invalid choice. Please enter 1, 2, or 3.");
+            }
+        }
+    }
+
+    private void handleMultiplayerSession(Scanner scan, Player player, int difficulty) {
+        System.out.println("You are playing against the Computer. You will take turns guessing.");
+        int playerGuesses = 0;
+        int computerGuesses = 0;
+        boolean playerTurn = true;
+
+        Game game = new Game(difficulty);
+        ComputerPlayer computer = new ComputerPlayer(difficulty);
+
+        while (!game.finished) {
+            if (playerTurn) {
+                System.out.print("Your turn. Guess an integer value from 0 to " + difficulty + ": ");
+                Integer playerValue;
+                try {
+                    playerValue = Integer.valueOf(scan.nextLine().trim(), 10);
+                } catch (Exception e) {
+                    System.out.println("Provided value is not a correct integer, try again.");
+                    continue;
+                }
+                playerGuesses++;
+                if (game.guess(playerValue)) {
+                    System.out.println("Congratulations! You've won in " + playerGuesses + " guesses.");
+                    writeGameResult(player, playerGuesses);
+                } else {
+                    System.out.print("You've guessed incorrectly. ");
+                    if (playerValue > game.answer) {
+                        System.out.print("Try guessing lower value.\n");
+                    } else {
+                        System.out.print("Try guessing higher value.\n");
+                    }
+                }
+            } else {
+                System.out.println("Computer's turn.");
+                int computerGuess = computer.makeGuess();
+                System.out.println("Computer guesses: " + computerGuess);
+                computerGuesses++;
+                if (game.guess(computerGuess)) {
+                    System.out.println("Computer won in " + computerGuesses + " guesses.");
+                    writeGameResult(new Player("Computer"), computerGuesses);
+                } else {
+                    System.out.print("Computer guessed incorrectly. ");
+                    if (computerGuess > game.answer) {
+                        System.out.print("Answer is lower.\n");
+                        computer.adjustRange(false, computerGuess);
+                    } else {
+                        System.out.print("Answer is higher.\n");
+                        computer.adjustRange(true, computerGuess);
+                    }
+                }
+            }
+            playerTurn = !playerTurn;
         }
     }
 
@@ -41,8 +138,8 @@ public class Initializer {
             System.out.print("What is your player name: ");
             var name = scan.nextLine().trim();
 
-            if (name.isBlank()) { 
-                System.out.println("Provided name is incorrect, try again.");
+            if (name.isBlank() || name.equalsIgnoreCase("Computer")) {
+                System.out.println("Provided name is incorrect or reserved, try again.");
             } else {
                 return new Player(name);
             }
@@ -64,11 +161,10 @@ public class Initializer {
         return 0;
     }
 
-    // Returns in how many guesses player end up winning.
-    private Integer handleSession(Scanner scan, Player player) {
-        var game = new Game();
+    private Integer handleSession(Scanner scan, Player player, int difficulty) {
+        var game = new Game(difficulty);
         while (!game.finished) {
-            System.err.print("Guess an integer value from 0 to 100: ");
+            System.err.print("Guess an integer value from 0 to " + difficulty + ": ");
             Integer playerValue;
 
             try {

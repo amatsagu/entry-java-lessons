@@ -8,10 +8,10 @@ public class Game {
     public Boolean finished = false;
     // private ArrayList<player> players = new ArrayList<player>();
     
-    public Game()
+    public Game(int maxRange)
     {
         var random = new Random(System.nanoTime());
-        this.answer = random.nextInt(101); // 0 - 100
+        this.answer = random.nextInt(maxRange + 1);
     }
 
     public Boolean guess(Integer guess) {
