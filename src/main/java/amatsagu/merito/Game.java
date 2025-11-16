@@ -1,17 +1,15 @@
 package amatsagu.merito;
 
-// import java.util.ArrayList;
 import java.util.Random;
 
 public class Game {
     public Integer answer, guesses = 0;
     public Boolean finished = false;
-    // private ArrayList<player> players = new ArrayList<player>();
     
-    public Game(int maxRange)
+    public Game(int minRange, int maxRange)
     {
         var random = new Random(System.nanoTime());
-        this.answer = random.nextInt(maxRange + 1);
+        this.answer = random.nextInt(maxRange - minRange + 1) + minRange;
     }
 
     public Boolean guess(Integer guess) {
@@ -19,7 +17,7 @@ public class Game {
             return true;
         }
 
-        var correct = guess == this.answer;
+        var correct = guess.equals(this.answer);
 
         if (!correct) {
             this.guesses++;
