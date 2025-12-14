@@ -1,12 +1,6 @@
 package amatsagu.merito;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Random;
 import java.util.Scanner;
 
 public class Initializer {
@@ -18,42 +12,51 @@ public class Initializer {
     private void runGame() {
         try (Scanner scan = new Scanner(System.in)) {
             var player = promptForPlayer(scan);
-            var currentBest = readBestScore(player); // lowest number of guesses
+            var stats = new Stats(player.nickname);
+            var computerStats = new Stats("Computer");
 
-            if (currentBest != 0) {
-                System.out.println("Welcome back! Your current best personal score from last game(s) is " + currentBest + " guess(es).");
-            } else {
-                System.out.println("Welcome! There's no previous record of your game(s) - starting as new challenger!");
-            }
+            System.out.println("Welcome " + player.nickname + "!");
+            if (stats.singleEasyBest > 0) System.out.println("Best Easy: " + stats.singleEasyBest);
+            if (stats.singleNormalBest > 0) System.out.println("Best Normal: " + stats.singleNormalBest);
+            if (stats.singleHardBest > 0) System.out.println("Best Hard: " + stats.singleHardBest);
+            System.out.println("Multiplayer Wins: " + stats.multiWins + " | Losses: " + stats.multiLosses);
 
             int difficulty = chooseDifficulty(scan);
             int gameMode = chooseGameMode(scan);
 
-            if (gameMode == 1) {
-                var score = handleSession(scan, player, difficulty);
-                if (score < currentBest || currentBest == 0) {
-                    System.out.println("Congratulations! You've established new personal best guess score of " + score + " guess(es)!");
-                    writeGameResult(player, score);
-                }
-            } else {
-                handleMultiplayerSession(scan, player, difficulty);
+            switch (gameMode) {
+                case 1:
+                    handleSinglePlayer(scan, stats, difficulty);
+                    break;
+                case 2:
+                    handleMultiplayerSession(scan, stats, computerStats, difficulty);
+                    break;
+                case 3:
+                    handleReverseSession(scan, difficulty);
+                    break;
             }
+
+            stats.save();
+            computerStats.save();
+
         } catch (Exception e) {
             System.err.println("caught exception error in main game loop: " + e);
+            e.printStackTrace();
         }
     }
 
     private int chooseGameMode(Scanner scan) {
         while (true) {
             System.out.println("Choose game mode:");
-            System.out.println("1. Single Player");
-            System.out.println("2. Multiplayer (vs. Computer)");
+            System.out.println("1. Single Player (You guess)");
+            System.out.println("2. Multiplayer (You vs Computer)");
+            System.out.println("3. Reverse (Computer guesses)");
             System.out.print("Enter your choice: ");
             String input = scan.nextLine().trim();
-            if (input.equals("1") || input.equals("2")) {
+            if (input.equals("1") || input.equals("2") || input.equals("3")) {
                 return Integer.parseInt(input);
             } else {
-                System.out.println("Invalid choice. Please enter 1 or 2.");
+                System.out.println("Invalid choice. Please enter 1, 2, or 3.");
             }
         }
     }
@@ -67,69 +70,11 @@ public class Initializer {
             System.out.print("Enter your choice: ");
             String input = scan.nextLine().trim();
             switch (input) {
-                case "1":
-                    return 100;
-                case "2":
-                    return 10000;
-                case "3":
-                    return 1000000;
-                default:
-                    System.out.println("Invalid choice. Please enter 1, 2, or 3.");
+                case "1": return 100;
+                case "2": return 10000;
+                case "3": return 1000000;
+                default: System.out.println("Invalid choice. Please enter 1, 2, or 3.");
             }
-        }
-    }
-
-    private void handleMultiplayerSession(Scanner scan, Player player, int difficulty) {
-        System.out.println("You are playing against the Computer. You will take turns guessing.");
-        int playerGuesses = 0;
-        int computerGuesses = 0;
-        boolean playerTurn = true;
-
-        Game game = new Game(difficulty);
-        ComputerPlayer computer = new ComputerPlayer(difficulty);
-
-        while (!game.finished) {
-            if (playerTurn) {
-                System.out.print("Your turn. Guess an integer value from 0 to " + difficulty + ": ");
-                Integer playerValue;
-                try {
-                    playerValue = Integer.valueOf(scan.nextLine().trim(), 10);
-                } catch (Exception e) {
-                    System.out.println("Provided value is not a correct integer, try again.");
-                    continue;
-                }
-                playerGuesses++;
-                if (game.guess(playerValue)) {
-                    System.out.println("Congratulations! You've won in " + playerGuesses + " guesses.");
-                    writeGameResult(player, playerGuesses);
-                } else {
-                    System.out.print("You've guessed incorrectly. ");
-                    if (playerValue > game.answer) {
-                        System.out.print("Try guessing lower value.\n");
-                    } else {
-                        System.out.print("Try guessing higher value.\n");
-                    }
-                }
-            } else {
-                System.out.println("Computer's turn.");
-                int computerGuess = computer.makeGuess();
-                System.out.println("Computer guesses: " + computerGuess);
-                computerGuesses++;
-                if (game.guess(computerGuess)) {
-                    System.out.println("Computer won in " + computerGuesses + " guesses.");
-                    writeGameResult(new Player("Computer"), computerGuesses);
-                } else {
-                    System.out.print("Computer guessed incorrectly. ");
-                    if (computerGuess > game.answer) {
-                        System.out.print("Answer is lower.\n");
-                        computer.adjustRange(false, computerGuess);
-                    } else {
-                        System.out.print("Answer is higher.\n");
-                        computer.adjustRange(true, computerGuess);
-                    }
-                }
-            }
-            playerTurn = !playerTurn;
         }
     }
 
@@ -146,72 +91,130 @@ public class Initializer {
         }
     }
 
-    private Integer readBestScore(Player player) {
-        var pathname = Paths.get("./" + player.nickname + ".txt");
-
-        if (Files.exists(pathname)) {
-            try {
-                String scoreText = Files.readString(pathname).trim();
-                return Integer.valueOf(scoreText);
-            } catch (IOException | NumberFormatException e) {
-                System.err.println("detected corrupted best score file (starting fresh): " + e.getMessage());
-            }
-        }
-    
-        return 0;
-    }
-
-    private Integer handleSession(Scanner scan, Player player, int difficulty) {
+    private void handleSinglePlayer(Scanner scan, Stats stats, int difficulty) {
         var game = new Game(difficulty);
         while (!game.finished) {
-            System.err.print("Guess an integer value from 0 to " + difficulty + ": ");
-            Integer playerValue;
-
-            try {
-                playerValue = Integer.valueOf(scan.nextLine().trim(), 10);
-            } catch (Exception e) {
-                System.out.println("Provided value is not a correct integer, try again.");
-                continue;
-            }
+            System.out.print("Guess an integer value from 0 to " + difficulty + ": ");
+            Integer playerValue = getIntInput(scan);
+            if (playerValue == null) continue;
 
             if (!game.guess(playerValue)) {
-                System.out.print("You've guessed incorrectly. ");
+                System.out.print("Incorrect. ");
+                if (playerValue > game.answer) System.out.println("Try lower.");
+                else System.out.println("Try higher.");
+            }
+        }
+        System.out.println("Congratulations! You've won in " + game.guesses + " guesses.");
+        updateSinglePlayerStats(stats, difficulty, game.guesses);
+    }
 
-                if (playerValue > game.answer) {
-                    System.out.print("Try guessing lower value.\n");
+    private void updateSinglePlayerStats(Stats stats, int difficulty, int score) {
+        if (difficulty == 100) {
+            if (stats.singleEasyBest == 0 || score < stats.singleEasyBest) stats.singleEasyBest = score;
+        } else if (difficulty == 10000) {
+            if (stats.singleNormalBest == 0 || score < stats.singleNormalBest) stats.singleNormalBest = score;
+        } else if (difficulty == 1000000) {
+            if (stats.singleHardBest == 0 || score < stats.singleHardBest) stats.singleHardBest = score;
+        }
+    }
+
+    private void handleMultiplayerSession(Scanner scan, Stats playerStats, Stats computerStats, int difficulty) {
+        System.out.println("Multiplayer: You vs Computer.");
+        
+        boolean playerTurn = new Random().nextBoolean();
+        System.out.println("Coin toss result: " + (playerTurn ? "You start!" : "Computer starts!"));
+
+        int playerGuesses = 0;
+        int computerGuesses = 0;
+
+        Game game = new Game(difficulty);
+        ComputerPlayer computer = new ComputerPlayer(difficulty);
+
+        while (!game.finished) {
+            if (playerTurn) {
+                System.out.print("Your turn. Guess (0-" + difficulty + "): ");
+                Integer playerValue = getIntInput(scan);
+                if (playerValue == null) continue;
+
+                playerGuesses++;
+                if (game.guess(playerValue)) {
+                    System.out.println("You won in " + playerGuesses + " guesses!");
+                    playerStats.multiWins++;
+                    computerStats.multiLosses++;
+                    return;
                 } else {
-                    System.out.print("Try guessing higher value.\n");
+                    System.out.print("Incorrect. ");
+                    if (playerValue > game.answer) System.out.println("Lower.");
+                    else System.out.println("Higher.");
+                }
+            } else {
+                System.out.println("Computer's turn.");
+                int computerGuess = computer.makeGuess();
+                System.out.println("Computer guesses: " + computerGuess);
+                computerGuesses++;
+
+                if (game.guess(computerGuess)) {
+                    System.out.println("Computer won in " + computerGuesses + " guesses.");
+                    computerStats.multiWins++;
+                    playerStats.multiLosses++;
+                    return;
+                } else {
+                    System.out.print("Computer incorrect. ");
+                    if (computerGuess > game.answer) {
+                        System.out.println("Answer is lower.");
+                        computer.adjustRange(false, computerGuess);
+                    } else {
+                        System.out.println("Answer is higher.");
+                        computer.adjustRange(true, computerGuess);
+                    }
+                }
+            }
+            playerTurn = !playerTurn;
+        }
+    }
+
+    private void handleReverseSession(Scanner scan, int difficulty) {
+        System.out.println("Reverse Mode: Enter a number for the computer to guess (0-" + difficulty + ").");
+        Integer target = null;
+        while (target == null || target < 0 || target > difficulty) {
+            System.out.print("Enter secret number: ");
+            target = getIntInput(scan);
+        }
+
+        Game game = new Game(difficulty);
+        game.answer = target;
+        game.guesses = 0;
+
+        ComputerPlayer computer = new ComputerPlayer(difficulty);
+        int attempts = 0;
+
+        while (!game.finished) {
+            attempts++;
+            int guess = computer.makeGuess();
+            System.out.println("Computer guesses: " + guess);
+
+            if (game.guess(guess)) {
+                System.out.println("Computer found the number " + target + " in " + attempts + " guesses!");
+            } else {
+                if (guess > target) {
+                    System.out.println("Too high.");
+                    computer.adjustRange(false, guess);
+                } else {
+                    System.out.println("Too low.");
+                    computer.adjustRange(true, guess);
                 }
             }
         }
-
-        System.out.println("Congratulations! You've won.");
-        return game.guesses;
     }
 
-    private void writeGameResult(Player player, Integer attempts) {
-        Path pathname = Paths.get("./" + player.nickname + ".txt");
-        File file = new File(pathname.toString());
-
-        if (!file.exists()) {
-            try 
-            {
-                Files.createFile(pathname);
-            }
-            catch (FileAlreadyExistsException e) 
-            {
-                System.err.println("file at path = " + pathname + " already exists");
-            } 
-            catch (IOException e) 
-            {
-                System.err.println("failed to create file for storing player game result: " + e);
-            }
-        }
-
-        try (PrintWriter writer = new PrintWriter(file)) {
-            writer.print(attempts);
-        } catch (IOException e) {
-            System.err.println("received error when tried to write player game result to file: " + e);
+    private Integer getIntInput(Scanner scan) {
+        try {
+            String line = scan.nextLine().trim();
+            if (line.isEmpty()) return null;
+            return Integer.valueOf(line);
+        } catch (Exception e) {
+            System.out.println("Invalid input. Enter an integer.");
+            return null;
         }
     }
 }
